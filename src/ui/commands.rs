@@ -15,6 +15,13 @@ pub enum CommandKind {
     Withdraw(Withdraw),
     Transfer(Transfer),
     Show(Show),
+    Get(GetType),
+}
+
+#[derive(Debug, StructOpt)]
+pub enum GetType {
+    FeeBase,
+    UtxoCount,
 }
 
 #[derive(Debug, StructOpt)]

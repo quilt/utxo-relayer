@@ -6,16 +6,18 @@
 
 mod contracts;
 mod pool;
+mod signer;
 mod ui;
 
 use crate::contracts::{Bundle, Deposit, Transfer, Txn, Utxo, Withdrawal};
 use crate::pool::{DepositPool, Pool, Transaction as _};
-use crate::ui::{Command, CommandKind, EventKind, Events, PoolType};
+use crate::signer::AbstractSigner;
+use crate::ui::{Command, CommandKind, EventKind, Events, GetType, PoolType};
 
 use ethers::providers::{JsonRpcClient, Provider};
-use ethers::signers::{Client, Wallet};
+use ethers::signers::Client;
 use ethers::types::{
-    Address, Transaction as EthTransaction, H160, H256, U256, U64,
+    Address, BlockNumber, Transaction as EthTransaction, H160, H256, U256, U64,
 };
 
 use std::convert::TryFrom;
@@ -29,12 +31,9 @@ use tokio::sync::Mutex;
 
 type Error = Box<dyn std::error::Error + Sync + Send>;
 
-const PRIVATE_KEY_STR: &str =
-    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/key.hex"));
-
 const UTXO: Address = H160([
-    0xC3, 0x29, 0xe0, 0xB1, 0xBC, 0x53, 0x4d, 0xeb, 0x32, 0x9A, 0x8d, 0x25,
-    0x76, 0x0b, 0x61, 0x6C, 0x81, 0x86, 0xe2, 0x08,
+    0xB6, 0x71, 0x83, 0x4D, 0xe1, 0xBa, 0x2C, 0x69, 0x2e, 0xc6, 0x85, 0xBE,
+    0x5f, 0x51, 0xaa, 0xd6, 0xD6, 0x08, 0x54, 0x96,
 ]);
 
 #[derive(Debug, StructOpt)]
@@ -59,6 +58,9 @@ impl Pending {
 
     pub fn regenerate(&mut self, base: U256) -> Option<&Bundle> {
         let mut bundle = Bundle::new();
+
+        // TODO: Handle the case where there are only deposits and no
+        //       other transactions.
 
         for txn in self.transactions.iter() {
             let gp = txn.gas_price();
@@ -124,7 +126,7 @@ impl Pending {
 pub struct State<T> {
     events: Events,
     provider: Provider<T>,
-    utxo: Utxo<T, Wallet>,
+    utxo: Utxo<T, AbstractSigner>,
     pending: Mutex<Pending>,
 }
 
@@ -137,8 +139,8 @@ async fn main() -> Result<(), Error> {
     let handle = tokio::runtime::Handle::current();
     let ui = ui::Ui::start(handle, opts.oob)?;
 
-    let provider = Provider::try_from("http://localhost:8544")?;
-    let signer = Wallet::from_str(PRIVATE_KEY_STR)?;
+    let provider = Provider::try_from("http://localhost:8545")?;
+    let signer = AbstractSigner::new(Some(1234));
     let client = Client::new(provider.clone(), signer);
     let utxo = Utxo::new(UTXO, client);
 
@@ -208,9 +210,57 @@ where
             PoolType::Withdrawals => show_withdrawals(state, cmd).await,
             PoolType::Deposits => show_deposits(state, cmd).await,
         },
+        CommandKind::Get(get) => match get {
+            GetType::FeeBase => get_fee_base(state, cmd).await,
+            GetType::UtxoCount => get_utxo_count(state, cmd).await,
+        },
         _ => events.reply(cmd, format!("{:?}", cmd)).await,
     }
 
+    Ok(())
+}
+
+async fn get_utxo_count<T>(state: &SharedState<T>, cmd: &Command)
+where
+    T: JsonRpcClient,
+{
+    let mut events = state.events.clone();
+    if let Err(e) = try_get_utxo_count(state, cmd).await {
+        events.reply(&cmd, EventKind::CommandError(e)).await;
+    }
+}
+
+async fn try_get_utxo_count<T>(
+    state: &SharedState<T>,
+    cmd: &Command,
+) -> Result<(), Error>
+where
+    T: JsonRpcClient,
+{
+    let count = state.utxo.get_utxo_count().call().await?;
+    state.events.clone().get(cmd, "utxo_count", count).await;
+    Ok(())
+}
+
+async fn get_fee_base<T>(state: &SharedState<T>, cmd: &Command)
+where
+    T: JsonRpcClient,
+{
+    let mut events = state.events.clone();
+    if let Err(e) = try_get_fee_base(state, cmd).await {
+        events.reply(&cmd, EventKind::CommandError(e)).await;
+    }
+}
+
+async fn try_get_fee_base<T>(
+    state: &SharedState<T>,
+    cmd: &Command,
+) -> Result<(), Error>
+where
+    T: JsonRpcClient,
+{
+    let base = fetch_base(state).await?;
+    state.events.clone().get(cmd, "fee_base", base).await;
     Ok(())
 }
 
@@ -413,13 +463,11 @@ where
     Ok(())
 }
 
-async fn fetch_base<T>(_: &SharedState<T>) -> Result<U256, Error>
+async fn fetch_base<T>(state: &SharedState<T>) -> Result<U256, Error>
 where
     T: JsonRpcClient,
 {
-    // TODO: When BASE actually exists in the contract, return that.
-    //Ok(0x3b9aca00.into())
-    Ok(5.into())
+    Ok(state.utxo.get_fee_base().call().await?)
 }
 
 async fn process_transactions<T>(state: SharedState<T>) -> Result<(), Error>
@@ -495,7 +543,9 @@ async fn broadcast<T>(
 where
     T: JsonRpcClient,
 {
-    let call = bundle.encode(&state.utxo);
+    let block = state.provider.get_block(BlockNumber::Latest).await?;
+
+    let call = bundle.encode(&state.utxo).gas_price(0).gas(block.gas_limit);
 
     call.call().await?;
     call.send().await?;

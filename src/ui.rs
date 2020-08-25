@@ -11,7 +11,7 @@ use ethers::types::{Transaction as EthTransaction, H256};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-pub use self::commands::{CommandKind, PoolType};
+pub use self::commands::{CommandKind, GetType, PoolType};
 
 use std::fmt;
 use std::thread::{self, JoinHandle};
@@ -72,6 +72,15 @@ impl Events {
     pub async fn new_block(&mut self, tx: H256) {
         self.oob(EventKind::NewBlock(tx)).await;
     }
+
+    pub async fn get<S, V>(&mut self, cmd: &Command, name: S, value: V)
+    where
+        S: Into<String>,
+        V: fmt::Display,
+    {
+        self.reply(cmd, EventKind::Get(name.into(), value.to_string()))
+            .await;
+    }
 }
 
 #[derive(Debug)]
@@ -106,6 +115,7 @@ pub enum EventKind {
     CommandError(crate::Error),
     PoolDrop(usize),
     PoolAdd(usize),
+    Get(String, String),
 }
 
 impl From<&str> for EventKind {
@@ -172,6 +182,7 @@ impl fmt::Display for EventKind {
             EventKind::PoolAdd(c) => {
                 write!(f, "Added {} transaction(s) to pool", c)
             }
+            EventKind::Get(name, value) => write!(f, "{} = {}", name, value),
         }
     }
 }

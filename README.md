@@ -15,10 +15,4 @@ This is an example program that, when paired with an Ethereum smart contract, em
 
 # Setup
 
-## Private Key
-
-The relayer requires a private key to sign deposit claims. Put a private key in `key.hex` in the same directory as `Cargo.toml`, in hex format without the `0x` prefix. Do not use a key you care about losing.
-
-## UTXO and Dropsafe Contracts
-
-There are two smart contracts deployed on the Kovan testnet that work with this relayer.
+<!-- TODO -->
