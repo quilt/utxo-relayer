@@ -9,10 +9,14 @@ mod pool;
 mod signer;
 mod ui;
 
-use crate::contracts::{Bundle, Deposit, Transfer, Txn, Utxo, Withdrawal};
+use crate::contracts::{
+    Bundle, Deposit, Output, Transfer, Txn, Utxo, Withdrawal,
+};
 use crate::pool::{DepositPool, Pool, Transaction as _};
 use crate::signer::AbstractSigner;
-use crate::ui::{Command, CommandKind, EventKind, Events, GetType, PoolType};
+use crate::ui::{
+    Command, CommandKind, EventKind, Events, GetType, GetUtxo, PoolType,
+};
 
 use ethers::providers::{JsonRpcClient, Provider};
 use ethers::signers::Client;
@@ -21,7 +25,6 @@ use ethers::types::{
 };
 
 use std::convert::TryFrom;
-use std::str::FromStr;
 use std::sync::Arc;
 
 use structopt::StructOpt;
@@ -211,8 +214,9 @@ where
             PoolType::Deposits => show_deposits(state, cmd).await,
         },
         CommandKind::Get(get) => match get {
-            GetType::FeeBase => get_fee_base(state, cmd).await,
-            GetType::UtxoCount => get_utxo_count(state, cmd).await,
+            GetType::FeeBase => get_fee_base(state, cmd).await?,
+            GetType::UtxoCount => get_utxo_count(state, cmd).await?,
+            GetType::Utxo(GetUtxo { id }) => get_utxo(state, cmd, *id).await?,
         },
         _ => events.reply(cmd, format!("{:?}", cmd)).await,
     }
@@ -220,17 +224,23 @@ where
     Ok(())
 }
 
-async fn get_utxo_count<T>(state: &SharedState<T>, cmd: &Command)
+async fn get_utxo<T>(
+    state: &SharedState<T>,
+    cmd: &Command,
+    id: U256,
+) -> Result<(), Error>
 where
     T: JsonRpcClient,
 {
-    let mut events = state.events.clone();
-    if let Err(e) = try_get_utxo_count(state, cmd).await {
-        events.reply(&cmd, EventKind::CommandError(e)).await;
-    }
+    let output_tuple = state.utxo.get_utxo(id).from(ENTRY_POINT).call().await?;
+    let output = Output::from(output_tuple);
+
+    let name = format!("utxo[{}]", id);
+    state.events.clone().get(cmd, name, output).await;
+    Ok(())
 }
 
-async fn try_get_utxo_count<T>(
+async fn get_utxo_count<T>(
     state: &SharedState<T>,
     cmd: &Command,
 ) -> Result<(), Error>
@@ -242,17 +252,7 @@ where
     Ok(())
 }
 
-async fn get_fee_base<T>(state: &SharedState<T>, cmd: &Command)
-where
-    T: JsonRpcClient,
-{
-    let mut events = state.events.clone();
-    if let Err(e) = try_get_fee_base(state, cmd).await {
-        events.reply(&cmd, EventKind::CommandError(e)).await;
-    }
-}
-
-async fn try_get_fee_base<T>(
+async fn get_fee_base<T>(
     state: &SharedState<T>,
     cmd: &Command,
 ) -> Result<(), Error>

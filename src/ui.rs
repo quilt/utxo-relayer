@@ -11,7 +11,7 @@ use ethers::types::{Transaction as EthTransaction, H256};
 use rustyline::error::ReadlineError;
 use rustyline::Editor;
 
-pub use self::commands::{CommandKind, GetType, PoolType};
+pub use self::commands::{CommandKind, GetType, GetUtxo, PoolType};
 
 use std::fmt;
 use std::thread::{self, JoinHandle};

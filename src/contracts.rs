@@ -25,6 +25,7 @@ use std::fmt;
 include!(concat!(env!("OUT_DIR"), "/abi/Utxo.rs"));
 include!(concat!(env!("OUT_DIR"), "/abi/Dropsafe.rs"));
 
+pub type OutputTuple = (Address, U256);
 pub type WithdrawalTuple = (U256, U256, u8, [u8; 32], [u8; 32]);
 pub type ClaimTuple = (U256, U256, Vec<U256>, u8, [u8; 32], [u8; 32]);
 pub type TransferTuple = (
@@ -38,6 +39,33 @@ pub type TransferTuple = (
     [u8; 32],
     [u8; 32],
 );
+
+#[derive(Debug, Clone)]
+pub struct Output {
+    pub owner: Address,
+    pub amount: U256,
+}
+
+impl From<Output> for OutputTuple {
+    fn from(o: Output) -> Self {
+        (o.owner, o.amount)
+    }
+}
+
+impl From<OutputTuple> for Output {
+    fn from(o: OutputTuple) -> Self {
+        Self {
+            owner: o.0,
+            amount: o.1,
+        }
+    }
+}
+
+impl fmt::Display for Output {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "own={} amt={}", self.owner, self.amount)
+    }
+}
 
 #[derive(Debug, Clone, Educe)]
 #[educe(Eq, PartialEq, Hash)]

@@ -22,6 +22,12 @@ pub enum CommandKind {
 pub enum GetType {
     FeeBase,
     UtxoCount,
+    Utxo(GetUtxo),
+}
+
+#[derive(Debug, StructOpt)]
+pub struct GetUtxo {
+    pub id: U256,
 }
 
 #[derive(Debug, StructOpt)]
