@@ -145,7 +145,7 @@ async fn main() -> Result<(), Error> {
     let ui = ui::Ui::start(handle, opts.oob)?;
 
     let provider = Provider::try_from("http://localhost:8545")?;
-    let signer = AbstractSigner::new(Some(1234));
+    let signer = AbstractSigner::new(Some(12345));
     let client = Client::new(provider.clone(), signer);
     let utxo = Utxo::new(UTXO, client);
 
@@ -546,7 +546,11 @@ where
 {
     let block = state.provider.get_block(BlockNumber::Latest).await?;
 
-    let call = bundle.encode(&state.utxo).gas_price(0).gas(block.gas_limit);
+    let call = bundle
+        .encode(&state.utxo)
+        .gas_price(0)
+        .gas(block.gas_limit)
+        .from(ENTRY_POINT);
 
     call.call().await?;
     call.send().await?;

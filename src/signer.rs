@@ -25,7 +25,7 @@ impl Signer for AbstractSigner {
     /// Signs the hash of the provided message after prefixing it
     fn sign_message<S: AsRef<[u8]>>(&self, _: S) -> Signature {
         Signature {
-            v: 0,
+            v: self.chain_id.map(|x| x * 2 + 35).unwrap_or_default(),
             r: Default::default(),
             s: Default::default(),
         }
@@ -42,7 +42,7 @@ impl Signer for AbstractSigner {
         let gas = tx.gas.unwrap();
 
         let signature = Signature {
-            v: 0,
+            v: self.chain_id.map(|x| x * 2 + 35).unwrap_or_default(),
             r: Default::default(),
             s: Default::default(),
         };
@@ -68,9 +68,9 @@ impl Signer for AbstractSigner {
             gas_price: Default::default(),
             gas,
             input: tx.data.unwrap_or_default(),
-            v: Default::default(),
-            r: Default::default(),
-            s: Default::default(),
+            v: signature.v.into(),
+            r: signature.r.0.into(),
+            s: signature.s.0.into(),
 
             // Leave these empty as they're only used for included transactions
             block_hash: None,
