@@ -31,9 +31,14 @@ use tokio::sync::Mutex;
 
 type Error = Box<dyn std::error::Error + Sync + Send>;
 
+const ENTRY_POINT: Address = H160([
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+]);
+
 const UTXO: Address = H160([
-    0xB6, 0x71, 0x83, 0x4D, 0xe1, 0xBa, 0x2C, 0x69, 0x2e, 0xc6, 0x85, 0xBE,
-    0x5f, 0x51, 0xaa, 0xd6, 0xD6, 0x08, 0x54, 0x96,
+    0x7C, 0x25, 0xD8, 0xB4, 0x98, 0x82, 0xd4, 0x9b, 0x95, 0x01, 0xDF, 0xD8,
+    0x05, 0x9D, 0xA8, 0x8a, 0xB2, 0xeB, 0x3B, 0xfD,
 ]);
 
 #[derive(Debug, StructOpt)]
@@ -158,11 +163,6 @@ async fn main() -> Result<(), Error> {
 
     let cmd_watcher = tokio::spawn(execute_commands(state.clone(), ui));
 
-    //process_transactions(state.clone()).await?;
-
-    // TODO: The ethers streams don't seem to return any events if they are
-    //       called from inside a tokio::spawn.
-
     let block_watcher =
         async { tokio::spawn(process_blocks(state.clone())).await? };
 
@@ -237,7 +237,7 @@ async fn try_get_utxo_count<T>(
 where
     T: JsonRpcClient,
 {
-    let count = state.utxo.get_utxo_count().call().await?;
+    let count = state.utxo.get_utxo_count().from(ENTRY_POINT).call().await?;
     state.events.clone().get(cmd, "utxo_count", count).await;
     Ok(())
 }
@@ -467,7 +467,8 @@ async fn fetch_base<T>(state: &SharedState<T>) -> Result<U256, Error>
 where
     T: JsonRpcClient,
 {
-    Ok(state.utxo.get_fee_base().call().await?)
+    let call = state.utxo.get_fee_base().from(ENTRY_POINT);
+    Ok(call.call().await?)
 }
 
 async fn process_transactions<T>(state: SharedState<T>) -> Result<(), Error>
